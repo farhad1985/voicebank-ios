@@ -14,7 +14,7 @@ class Recorder:  NSObject, AVAudioRecorderDelegate {
     
     var recordingSession: AVAudioSession!
     var permission_granted = false
-    var audioRecorder: AVAudioRecorder!
+    var audioRecorder: AVAudioRecorder?
     var wsComm: WSComm!
     var sentence: String = ""
     var viewController: ViewController!
@@ -59,13 +59,11 @@ class Recorder:  NSObject, AVAudioRecorderDelegate {
                         self.siriEnabled = false
                         print("Speech recognition not yet authorized")
                 }
-                
-                OperationQueue.main.addOperation() {
-                }
+
             }
             
         } catch {
-            // failed to record!
+            print("failed to record!")
         }
     }
     
@@ -79,28 +77,27 @@ class Recorder:  NSObject, AVAudioRecorderDelegate {
         
         do {
             self.audioRecorder = try AVAudioRecorder(url:  (hashSentences[self.currentsentenceHash]?.audioFilename)!, settings: settings)
-            self.audioRecorder.delegate = self
+            self.audioRecorder?.delegate = self
         } catch {
-            //finishRecording(success: false)
-            NSLog("Error Recording")
+            print("Error Recording")
         }
     }
     
     func startRecording() {
-        self.audioRecorder.record()
+        self.audioRecorder?.record()
     }
     
     func stopRecording(recordingCanceled: Bool) {
         self.recordingCanceled = recordingCanceled
-        self.audioRecorder.stop()
+        self.audioRecorder?.stop()
     }
     
     func finishRecording() {
-        NSLog("Finished Recording")
+        print("Finished Recording")
     }
     
     func isRecording() -> Bool {
-        return self.audioRecorder.isRecording
+        return self.audioRecorder?.isRecording ?? false
     }
     
     func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
@@ -130,39 +127,36 @@ class Recorder:  NSObject, AVAudioRecorderDelegate {
     }
 
     func playSound(_ sound: String) {
-        let audioFilePath = Bundle.main.path(forResource: sound, ofType: "wav")
-        if audioFilePath != nil {
-            let audioFileUrl = NSURL.fileURL(withPath: audioFilePath!)
-            do {
-                try audioPlayer = AVAudioPlayer(contentsOf: audioFileUrl)
-                audioPlayer.play()
-            } catch {
-                print("Error Playing Audio Clip")
-            }
-        } else {
+        guard let audioFilePath = Bundle.main.path(forResource: sound, ofType: "wav") else {
             print("Audio file is not found")
+            return
+        }
+        
+        let audioFileUrl = NSURL.fileURL(withPath: audioFilePath)
+        do {
+            try audioPlayer = AVAudioPlayer(contentsOf: audioFileUrl)
+            audioPlayer.play()
+        } catch {
+            print("Error Playing Audio Clip")
         }
     }
     
     func recognizeFile(sentenceHash: String, completion: @escaping (String) -> Void) {
         
-        guard let myRecognizer = SFSpeechRecognizer() else {
+        guard let myRecognizer = SFSpeechRecognizer(), !myRecognizer.isAvailable else {
             // A recognizer is not supported for the current locale
-            return
-        }
-        
-        if !myRecognizer.isAvailable {
             // The recognizer is not available right now
             return
         }
         
-        let request = SFSpeechURLRecognitionRequest(url: (hashSentences[self.currentsentenceHash]?.audioFilename)! as URL)
+        guard let url = (hashSentences[self.currentsentenceHash]?.audioFilename) else {return}
+        let request = SFSpeechURLRecognitionRequest(url: url)
         request.shouldReportPartialResults = false
 
         myRecognizer.recognitionTask(with: request) { (result, error) in
             guard let result = result else {
-                completion("STT Error:\(error?.localizedDescription)")
-                print("STT Error:\(error?.localizedDescription)")
+                completion("STT Error:\(String(describing: error?.localizedDescription))")
+                print("STT Error:\(String(describing: error?.localizedDescription))")
                 // Recognition failed, so check error for details and handle it
                 return
             }
